@@ -129,11 +129,17 @@ export function parseData(payload) {
     return { deviceId, type };
   }
   const active = powerOf(payload, '16.7.0') ?? powerOf(payload, '16.7');
+  const imports = tariffs(payload, '1.8');
+  const rawIndex = own(payload, '1.8.0');
   return {
     deviceId,
     type,
     timestamp: timestampOf(own(payload, 'timestamp')),
-    imports: tariffs(payload, '1.8'),
+    imports,
+    // 1.8.0 sent but not usable (no known unit, not a number, out of
+    // bounds): the status says so. A register at 0 is absent (models.py).
+    indexRefused:
+      rawIndex !== undefined && imports.total === undefined && measurement(rawIndex)?.value !== 0,
     exports: tariffs(payload, '2.8'),
     power: active,
     powerAbsolute: powerOf(payload, '15.7.0'),

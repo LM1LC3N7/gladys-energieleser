@@ -97,10 +97,14 @@ export const T = {
       },
       notes,
     ),
-  noDevice: (deviceId) => ({
-    en: `stromleser ${deviceId} found: create its device from the "Discover" tab to receive its values.`,
-    fr: `stromleser ${deviceId} trouvé : créez son appareil depuis l’onglet « Découverte » pour recevoir ses valeurs.`,
-  }),
+  noDevice: (deviceId, notes = []) =>
+    withNotes(
+      {
+        en: `stromleser ${deviceId} found: create its device from the "Discover" tab to receive its values.`,
+        fr: `stromleser ${deviceId} trouvé : créez son appareil depuis l’onglet « Découverte » pour recevoir ses valeurs.`,
+      },
+      notes,
+    ),
   waiting: (address) => ({
     en: `Waiting for the first answer of the energieleser reader at ${address}.`,
     fr: `En attente de la première réponse du lecteur energieleser à l’adresse ${address}.`,
@@ -115,6 +119,10 @@ export const T = {
       notes,
     ),
   notes: {
+    noTimestamp: {
+      en: 'The reader gives no timestamp: a frozen reading (optical head moved) cannot be told, the power is sent as it comes.',
+      fr: 'Le lecteur ne donne pas d’horodatage : un relevé figé (tête optique déplacée) ne peut pas être reconnu, la puissance est envoyée telle quelle.',
+    },
     pinLocked: {
       en: 'The meter gives no power: it is probably PIN-locked (enter the PIN given by your grid operator on the meter to unlock its extended data). The indexes go on.',
       fr: 'Le compteur ne donne pas de puissance : il est sans doute verrouillé par PIN (saisissez sur le compteur le PIN donné par votre gestionnaire de réseau pour débloquer ses données étendues). Les index continuent.',

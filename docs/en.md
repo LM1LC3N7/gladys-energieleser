@@ -15,7 +15,7 @@ values the meter gives (a meter sends a subset of them):
 
 | Feature                                | Kind                     | Meter code             |
 | -------------------------------------- | ------------------------ | ---------------------- |
-| Net power (negative when injecting)    | energy sensor, W         | 16.7.0                 |
+| Net power (see below)                  | energy sensor, W         | 16.7.0                 |
 | Consumption index                      | energy index, kWh        | 1.8.0                  |
 | Consumption index, tariff 1 to 4 (kWh) | plain sensor             | 1.8.1 to 1.8.4         |
 | Injection index (kWh), tariffs 1 to 4  | plain sensor             | 2.8.0 to 2.8.4         |
@@ -25,16 +25,24 @@ values the meter gives (a meter sends a subset of them):
 
 - The **consumption index** feeds the Gladys energy monitoring: Gladys
   derives the consumption and its cost from it. It is published once a minute
-  and checked first: never 0; a drop or a jump that the home could not have
-  drawn is **held back** (the last accepted value is sent again) and shown in
+  and checked first: never 0; any drop, even of 1 Wh, or a jump that the home
+  could not have drawn is **held back** (the last accepted value is sent again) and shown in
   the integration status. If it is right (a new meter, a long outage), click
   **Accept the held index**: exactly the value shown is taken. Saving the
   configuration never accepts it.
 - The **injection** is never in the energy monitoring (it would be billed as
   consumption): plain sensors.
+- The **net power** is usually negative when the home injects, depending on
+  the meter (to be confirmed on a real meter).
 - The powers are sent every 10 seconds, only when they change (and every
   10 minutes otherwise). When the reader gives no new reading for 5 minutes
-  (optical head moved), they are no longer sent and the status says so.
+  (optical head moved), they are no longer sent and the status says so. After
+  a start, they wait until the reading is seen moving (about 10 seconds), so
+  that a reading frozen before a restart is never sent as new. A reader that
+  gives no timestamp cannot be checked: the status says so.
+- When the meter shows new values later (a meter unlocked by its PIN), the
+  device gets new features: in the **Discover** tab, click **Update** on the
+  device to add them (its history is kept).
 
 ## Setup
 
@@ -68,5 +76,6 @@ its extended data. The indexes go on in the meantime.
 
 The status of the integration says what happens: address missing, reader
 unreachable (a new try after 10 s, doubled up to 5 minutes), wrong answer,
-index held back. To look at the reader yourself, open
+reader asking to wait (HTTP 429 or 5xx: reads paused from 1 minute to
+6 hours, kept across restarts), index held back. To look at the reader yourself, open
 `http://<address>/v1/data` in a browser on the same network.

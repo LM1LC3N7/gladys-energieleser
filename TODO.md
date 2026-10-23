@@ -66,6 +66,16 @@
   only energy-sensor power, min -100 kW. 1.7.0, 2.7.0, 15.7.0 and the phases
   are plain sensors (the phases without history). A power without unit is read
   in W.
+- **Frozen reading (review 1, I1)**: the last `timestamp` of the reader and
+  the wall time it changed are kept in `/data` (`fresh`). After a restart, a
+  reading with that same timestamp keeps its age (stale after 5 min: no power
+  sent); any other first timestamp is not trusted until it moves (about 10 s):
+  a power frozen before a restart is never published as new. Without a
+  `timestamp` (the library requires it), the power is published and the
+  status says a frozen reading cannot be told. A 1.8.0 sent but unusable (no
+  known unit) is told in the status, even before the index feature exists.
+  The "another reader" note ends as soon as the reader answering has its
+  created device.
 - **Features**: what the reader showed, merged with the features of the
   created device: the set only grows, a device published again never loses a
   feature.

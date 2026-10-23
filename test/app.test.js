@@ -45,14 +45,18 @@ test('a created device: live values every 10 s, the indexes once a minute', asyn
   const reader = createReader(() => strom({ kwh, w: 400 }));
   const s = await setup({ devices: [created()], reader });
   await s.start();
-  assert.deepEqual(statesOf(s.gladys, 'power'), [400]);
+  // The first reading of a fresh start: its timestamp not yet seen moving,
+  // the live values wait for the next one (review 1, I1).
+  assert.deepEqual(statesOf(s.gladys, 'power'), []);
   assert.deepEqual(statesOf(s.gladys, 'consumption_index'), [9000]);
   assert.deepEqual(statesOf(s.gladys, 'consumption_t1'), [5400]);
   assert.deepEqual(statesOf(s.gladys, 'injection_index'), [1500]);
+  await s.wait(10 * SECOND);
+  assert.deepEqual(statesOf(s.gladys, 'power'), [400]);
   assert.deepEqual(statesOf(s.gladys, 'power_l1'), [200]);
   assert.deepEqual(statesOf(s.gladys, 'signal'), [-60]);
   kwh = 9000.01;
-  await s.wait(50 * SECOND);
+  await s.wait(40 * SECOND);
   assert.equal(reader.net.calls.length, 6, 'one read every 10 s');
   assert.deepEqual(statesOf(s.gladys, 'consumption_index'), [9000], 'not before a minute');
   await s.wait(10 * SECOND);
@@ -166,15 +170,22 @@ test('another reader at the address: its values go to its own device', async () 
   const reader = createReader(() => strom({ id, w: 100 }));
   const s = await setup({ devices: [created()], reader });
   await s.start();
+  await s.wait(10 * SECOND);
   id = 'STROM_ONE_5555555555';
   reader.world = () => strom({ id, w: 777 });
-  await s.wait(10 * SECOND);
+  await s.wait(30 * SECOND);
   assert.deepEqual(statesOf(s.gladys, 'power'), [100], 'never into the old device');
   assert.equal(
     s.gladys.fake.discoveredDevices[0].external_id,
     'ext:energieleser:energieleser:STROM_ONE_5555555555',
   );
   assert.match(s.gladys.fake.connectionStatus.message.en, /STROM_ONE_5555555555/);
+  // The first reader back, with its device: the note ends (review 1).
+  reader.world = () => strom({ id: DEVICE_ID, w: 200 });
+  await s.wait(10 * SECOND);
+  assert.doesNotMatch(s.gladys.fake.connectionStatus.message.en, /Another reader/);
+  await s.wait(10 * SECOND);
+  assert.deepEqual(statesOf(s.gladys, 'power'), [100, 200]);
 });
 
 test('an unreadable answer is never another reader; retries are doubled', async () => {
@@ -215,14 +226,65 @@ test('429: a pause kept in /data, never a read during it, even after a restart',
 });
 
 test('a frozen reading: the power is no longer sent, the status says so', async () => {
-  const reader = createReader(() => strom({ ts: 42, w: 300 }));
+  const reader = createReader(() => strom({ w: 300 }));
   const s = await setup({ devices: [created()], reader });
   await s.start();
-  await s.wait(6 * MINUTE);
+  await s.wait(20 * SECOND);
   reader.world = () => strom({ ts: 42, w: 700 });
+  await s.wait(6 * MINUTE);
+  reader.world = () => strom({ ts: 42, w: 900 });
   await s.wait(MINUTE);
-  assert.deepEqual(statesOf(s.gladys, 'power'), [300]);
+  assert.deepEqual(statesOf(s.gladys, 'power'), [300, 700]);
   assert.match(s.gladys.fake.connectionStatus.message.en, /no new reading/);
+});
+
+test('a reading frozen before a restart is never published as new (review 1, I1)', async () => {
+  const store = createMemoryStore();
+  const reader = createReader(() => strom({ w: 300 }));
+  const device = created();
+  const s = await setup({ devices: [device], reader, store });
+  await s.start();
+  await s.wait(20 * SECOND);
+  reader.world = () => strom({ ts: 42, w: 3000 });
+  await s.wait(10 * MINUTE);
+  assert.deepEqual(statesOf(s.gladys, 'power'), [300, 3000]);
+  assert.equal(store.data.fresh.timestamp, 42);
+  await s.app.stop();
+  // Restarted 30 s later, the reading still frozen: nothing live is sent.
+  const again = await setup({ devices: [device], reader, store, now: s.clock.now + 30 * SECOND });
+  await again.start();
+  await again.wait(MINUTE);
+  assert.deepEqual(statesOf(again.gladys, 'power'), []);
+  assert.match(again.gladys.fake.connectionStatus.message.en, /no new reading/);
+  // A reading frozen at a timestamp never kept: not sent until it moves.
+  await again.app.stop();
+  reader.world = () => strom({ ts: 77, w: 2500 });
+  const third = await setup({ devices: [device], reader, store, now: again.clock.now + MINUTE });
+  await third.start();
+  await third.wait(MINUTE);
+  assert.deepEqual(statesOf(third.gladys, 'power'), []);
+  reader.world = () => strom({ w: 400 });
+  await third.wait(10 * SECOND);
+  assert.deepEqual(statesOf(third.gladys, 'power'), [400]);
+});
+
+test('a reading without timestamp is published, the status says it cannot be checked', async () => {
+  const reader = createReader(() =>
+    json({ device_id: DEVICE_ID, '1.8.0': '9000 kWh', '16.7.0': '120 W' }),
+  );
+  const s = await setup({ devices: [created()], reader });
+  await s.start();
+  assert.deepEqual(statesOf(s.gladys, 'power'), [120]);
+  assert.match(s.gladys.fake.connectionStatus.message.en, /no timestamp/);
+});
+
+test('a 1.8.0 without a known unit is told in the status, even before any index', async () => {
+  const reader = createReader(() => ({ device_id: DEVICE_ID, '1.8.0': '9000', '16.7.0': '1 W' }));
+  const s = await setup({ reader });
+  await s.start();
+  assert.match(s.gladys.fake.connectionStatus.message.en, /no consumption index \(1\.8\.0\)/);
+  const keys = s.gladys.fake.discoveredDevices[0].features.map((f) => f.external_id);
+  assert.ok(!keys.includes(F('consumption_index')));
 });
 
 test('a PIN-locked meter: the indexes go on, the status says so', async () => {

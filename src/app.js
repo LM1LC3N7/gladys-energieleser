@@ -97,6 +97,17 @@ function validPause(pause, now) {
   };
 }
 
+/** The freshness read back from /data: `{ deviceId, timestamp, at }`, `at` never in the future. */
+function validFresh(fresh, now) {
+  return fresh &&
+    typeof fresh.deviceId === 'string' &&
+    DEVICE_ID.test(fresh.deviceId) &&
+    Number.isSafeInteger(fresh.timestamp) &&
+    finite(fresh.at)
+    ? { deviceId: fresh.deviceId, timestamp: fresh.timestamp, at: Math.min(fresh.at, now) }
+    : undefined;
+}
+
 /** The index states kept in /data: plain objects under string keys only. */
 function keptIndexes(indexes) {
   if (!indexes || typeof indexes !== 'object' || Array.isArray(indexes)) {
@@ -157,6 +168,14 @@ export class EnergieleserApp {
     /** Monotonic time of the last read started. */
     this.lastReadAt =
       this.lastAttemptAt === undefined ? undefined : monotonic() - (at - this.lastAttemptAt);
+    /**
+     * The freshness kept in /data (review 1, I1): `{ deviceId, timestamp, at }`,
+     * the last `timestamp` of the reader and the wall time it changed, saved
+     * with the state of each read. After a restart, a reading with this same
+     * timestamp keeps its age: a frozen power is never published as new.
+     */
+    this.fresh = validFresh(kept.fresh, at);
+    this.keptFresh = this.fresh;
     /** By index feature external id. */
     this.guards = new Map();
     this.resetReads();
@@ -173,7 +192,12 @@ export class EnergieleserApp {
     /** Freshness of the reading: its `timestamp`, and when (monotonic) it last changed. */
     this.readingStamp = undefined;
     this.freshAt = 0;
-    this.noIndex = false;
+    /**
+     * The timestamp was seen changing in this session, or matches the one
+     * kept in /data: until then the live values are not published (a reading
+     * frozen before a restart is never sent as new).
+     */
+    this.freshKnown = false;
     this.otherReader = undefined;
     /** Monotonic time the indexes were last published. */
     this.lastIndexAt = undefined;
@@ -369,6 +393,11 @@ export class EnergieleserApp {
       this.lastIndexAt = undefined;
     }
     this.deviceId = reading.deviceId;
+    if (this.createdDevice()) {
+      // The reader answering has its device (the first one back after a
+      // swap, or a device created since): the note about it ends (review 1).
+      this.otherReader = undefined;
+    }
     this.followFreshness(reading, mono);
     this.outcome = { at: mono, kind: 'reading', reading };
     const keys = union(
@@ -424,16 +453,51 @@ export class EnergieleserApp {
     await this.updateStatus();
   }
 
-  /** The reading is stale when its `timestamp` has not changed for a while (monotonic). */
+  /**
+   * The reading is stale when its `timestamp` has not changed for a while
+   * (monotonic). The first timestamp of a session is fresh only when it
+   * matches the one kept in /data (its age then goes on from there) or once
+   * it changes: a reading frozen before a restart is never sent as new
+   * (review 1, I1).
+   */
   followFreshness(reading, mono) {
-    if (reading.timestamp === undefined || reading.timestamp !== this.readingStamp) {
-      this.readingStamp = reading.timestamp;
+    const ts = reading.timestamp;
+    if (ts === undefined) {
+      // Without timestamp, a frozen reading cannot be told (the status says so).
+      this.readingStamp = undefined;
+      this.freshKnown = true;
       this.freshAt = mono;
+      return;
+    }
+    const now = this.now();
+    if (this.readingStamp === undefined) {
+      this.readingStamp = ts;
+      const kept = this.keptFresh;
+      if (kept && kept.deviceId === reading.deviceId && kept.timestamp === ts) {
+        this.freshKnown = true;
+        this.freshAt = mono - Math.max(0, now - kept.at);
+        this.fresh = kept;
+      } else {
+        this.freshKnown = false;
+        this.freshAt = mono;
+      }
+      return;
+    }
+    if (ts !== this.readingStamp) {
+      this.readingStamp = ts;
+      this.freshAt = mono;
+      this.freshKnown = true;
+      this.fresh = { deviceId: reading.deviceId, timestamp: ts, at: now };
     }
   }
 
   isStale(mono) {
     return this.readingStamp !== undefined && mono - this.freshAt >= READING_STALE_AFTER;
+  }
+
+  /** Whether the live values (powers, signal) of the last reading may be published. */
+  isLive(mono) {
+    return this.freshKnown && !this.isStale(mono);
   }
 
   // --- Status ------------------------------------------------------------------
@@ -470,14 +534,22 @@ export class EnergieleserApp {
       return [false, T.unreachable(address, this.lastError, wait, notes)];
     }
     if (this.outcome?.kind === 'reading' && this.deviceId) {
-      if (!this.createdDevice()) {
-        return [true, T.noDevice(this.deviceId)];
-      }
+      const reading = this.outcome.reading;
       const extra = [];
       if (this.otherReader) extra.push(T.notes.otherReader(this.otherReader));
-      if (this.outcome.reading.pinLocked) extra.push(T.notes.pinLocked);
-      if (this.isStale(this.monotonic())) extra.push(T.notes.stale);
-      if (this.noIndex) extra.push(T.notes.noIndex);
+      if (reading.pinLocked) extra.push(T.notes.pinLocked);
+      if (reading.timestamp === undefined) extra.push(T.notes.noTimestamp);
+      else if (this.isStale(this.monotonic())) extra.push(T.notes.stale);
+      // 1.8.0 sent but unusable, or gone after it was seen (review 1).
+      if (
+        reading.indexRefused ||
+        (reading.imports.total === undefined && this.keys.has(FEATURE.CONSUMPTION_INDEX))
+      ) {
+        extra.push(T.notes.noIndex);
+      }
+      if (!this.createdDevice()) {
+        return [true, T.noDevice(this.deviceId, extra)];
+      }
       return [true, T.ok(address, [...extra, ...notes])];
     }
     return [false, T.waiting(address)];
@@ -505,6 +577,7 @@ export class EnergieleserApp {
       keys: [...this.keys],
       pause: this.pause ?? null,
       lastAttemptAt: this.lastAttemptAt ?? null,
+      fresh: this.fresh ?? null,
       indexes: Object.fromEntries(merged),
     };
     const key = JSON.stringify(state);
@@ -614,8 +687,9 @@ export class EnergieleserApp {
       return;
     }
     const external = this.external();
-    // A frozen reading (the head fell off): its power would look live, it is not sent.
-    const states = this.isStale(mono) ? [] : liveStates(external, reading);
+    // A frozen reading (the head fell off), or one not yet seen moving since a
+    // restart: its power would look live, it is not sent.
+    const states = this.isLive(mono) ? liveStates(external, reading) : [];
     if (this.lastIndexAt !== undefined && mono < this.lastIndexAt) {
       this.lastIndexAt = undefined;
     }
@@ -625,7 +699,6 @@ export class EnergieleserApp {
       const guard = this.guardOf(created, id);
       const raw = reading.imports.total;
       const total = finite(raw) ? round(raw, 3) : undefined;
-      this.noIndex = total === undefined && this.keys.has(FEATURE.CONSUMPTION_INDEX);
       const plausible = total !== undefined && guard.accept(total, this.now());
       if (total !== undefined && !plausible && guard.held) {
         this.logger.warn(

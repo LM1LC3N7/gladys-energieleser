@@ -21,6 +21,10 @@ the notes of the version's GitHub Release.
   and Wi-Fi signal as plain sensors (the injection is never billed).
 - Status notes: PIN-locked meter, frozen reading, another reader at the
   address, index held back; other energieleser readers refused by name.
+- A reading frozen before a restart is never published as new: the last
+  timestamp of the reader and the time it changed are kept in `/data`; a
+  reading without timestamp and a 1.8.0 without known unit are told in the
+  status.
 - Test button that never reads faster than the 10-second pace; pace and
   429/5xx pauses kept across restarts.
 

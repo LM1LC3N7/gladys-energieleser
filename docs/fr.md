@@ -18,7 +18,7 @@ compteur n'en envoie qu'une partie) :
 
 | Fonction                                  | Nature                          | Code du compteur       |
 | ----------------------------------------- | ------------------------------- | ---------------------- |
-| Puissance nette (négative en injection)   | capteur d'énergie, W            | 16.7.0                 |
+| Puissance nette (voir plus bas)           | capteur d'énergie, W            | 16.7.0                 |
 | Index de consommation                     | index d'énergie, kWh            | 1.8.0                  |
 | Index de consommation, tarifs 1 à 4 (kWh) | simple capteur                  | 1.8.1 à 1.8.4          |
 | Index d'injection (kWh), tarifs 1 à 4     | simple capteur                  | 2.8.0 à 2.8.4          |
@@ -28,8 +28,8 @@ compteur n'en envoie qu'une partie) :
 
 - L'**index de consommation** alimente le suivi énergétique de Gladys, qui en
   tire la consommation et son coût. Il est publié chaque minute et vérifié
-  d'abord : jamais 0 ; une baisse ou un saut que le foyer n'a pas pu
-  consommer est **retenu** (la dernière valeur acceptée est renvoyée) et
+  d'abord : jamais 0 ; toute baisse, même d'1 Wh, ou un saut que le foyer
+  n'a pas pu consommer est **retenu** (la dernière valeur acceptée est renvoyée) et
   affiché dans l'état de l'intégration. S'il est juste (nouveau compteur,
   longue coupure), cliquez sur **Accepter l'index retenu** : exactement la
   valeur affichée est prise. Enregistrer la configuration ne l'accepte
@@ -39,7 +39,16 @@ compteur n'en envoie qu'une partie) :
 - Les puissances sont envoyées toutes les 10 secondes, seulement quand elles
   changent (et toutes les 10 minutes sinon). Quand le lecteur ne donne plus
   de nouveau relevé pendant 5 minutes (tête optique déplacée), elles ne sont
-  plus envoyées et l'état le dit.
+  plus envoyées et l'état le dit. Après un démarrage, elles attendent que le
+  relevé bouge (une dizaine de secondes) : un relevé figé avant un
+  redémarrage n'est jamais envoyé comme neuf. Un lecteur qui ne donne pas
+  d'horodatage ne peut pas être vérifié : l'état le dit.
+- La **puissance nette** est en général négative quand le foyer injecte,
+  selon le compteur (à confirmer sur un vrai compteur).
+- Quand le compteur donne plus tard de nouvelles valeurs (compteur débloqué
+  par son PIN), l'appareil reçoit de nouvelles fonctions : dans l'onglet
+  **Découverte**, cliquez sur **Mettre à jour** sur l'appareil pour les
+  ajouter (son historique est gardé).
 
 ## Installation
 
@@ -75,5 +84,6 @@ continuent en attendant.
 
 L'état de l'intégration dit ce qui se passe : adresse manquante, lecteur
 injoignable (nouvel essai après 10 s, doublé jusqu'à 5 minutes), réponse
-inattendue, index retenu. Pour regarder le lecteur vous-même, ouvrez
+inattendue, lecteur qui demande d'attendre (HTTP 429 ou 5xx : lectures en
+pause de 1 minute à 6 heures, gardée après un redémarrage), index retenu. Pour regarder le lecteur vous-même, ouvrez
 `http://<adresse>/v1/data` dans un navigateur sur le même réseau.

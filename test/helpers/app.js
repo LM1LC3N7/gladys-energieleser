@@ -34,13 +34,21 @@ export function created({ index, answer = strom() } = {}) {
   return device;
 }
 
-/** The reader: `world(t)` -> an answer object | 'timeout' | a Response. */
+/**
+ * The reader: `world(t)` -> an answer object | 'timeout' | a Response. An
+ * answer without `timestamp` gets the time of the clock (a live reading).
+ */
 export function createReader(world = () => strom()) {
   const reader = { world, clock: { now: NOW } };
   reader.net = createFetch(() => {
     const answer = reader.world(reader.clock.now);
     if (answer === 'timeout') throw timeoutError();
-    return answer instanceof Response ? answer : json(answer);
+    if (answer instanceof Response) return answer;
+    return json(
+      'timestamp' in answer
+        ? answer
+        : { ...answer, timestamp: String(Math.floor(reader.clock.now / 1000)) },
+    );
   });
   return reader;
 }

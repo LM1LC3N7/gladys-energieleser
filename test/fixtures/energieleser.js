@@ -47,12 +47,13 @@ export const GAS = {
 
 /**
  * A stromleser answer: `kwh` the 1.8.0 index (kWh), `w` the net power,
- * `ts` the timestamp; `extra` merged in.
+ * `ts` the timestamp (left out: the fake reader of test/helpers/app.js gives
+ * the time of its clock, a reading that moves); `extra` merged in.
  */
-export function strom({ kwh = 9000, w = 350, ts = 1_000, id = DEVICE_ID, extra = {} } = {}) {
+export function strom({ kwh = 9000, w = 350, ts, id = DEVICE_ID, extra = {} } = {}) {
   return {
     device_id: id,
-    timestamp: String(ts),
+    ...(ts === undefined ? {} : { timestamp: String(ts) }),
     '1.8.0': `${(kwh * 1000).toFixed(3)} Wh`,
     '1.8.1': `${(kwh * 600).toFixed(3)} Wh`,
     '1.8.2': `${(kwh * 400).toFixed(3)} Wh`,
