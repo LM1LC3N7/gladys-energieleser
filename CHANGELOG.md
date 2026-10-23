@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-23
+
 ### Added
 
 - First version: an energieleser stromleser read through its local API
@@ -28,4 +30,5 @@ the notes of the version's GitHub Release.
 - Test button that never reads faster than the 10-second pace; pace and
   429/5xx pauses kept across restarts.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-energieleser/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-energieleser/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-energieleser/releases/tag/v0.1.1
