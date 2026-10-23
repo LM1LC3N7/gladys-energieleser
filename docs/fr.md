@@ -1,67 +1,79 @@
-# Template de démonstration
+# energieleser
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Intégration non officielle, sans lien avec energieleser (nineti GmbH). Elle
+lit un **stromleser**, le lecteur optique energieleser posé sur le port
+infrarouge d'un compteur d'électricité allemand, par son API locale : pas de
+cloud, pas de compte, rien d'envoyé au lecteur sinon une lecture toutes les
+10 secondes.
+
+**Jamais testé avec un vrai lecteur energieleser** : l'intégration a été
+écrite à partir de la bibliothèque Python du fabricant (celle de Home
+Assistant). Vos retours sont bienvenus.
 
 ## Ce que vous obtenez
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+Un appareil par lecteur, nommé d'après son identifiant
+(`stromleser STROM_ONE_…`), avec les valeurs que donne le compteur (un
+compteur n'en envoie qu'une partie) :
 
-## Configuration
+| Fonction                                  | Nature                          | Code du compteur       |
+| ----------------------------------------- | ------------------------------- | ---------------------- |
+| Puissance nette (négative en injection)   | capteur d'énergie, W            | 16.7.0                 |
+| Index de consommation                     | index d'énergie, kWh            | 1.8.0                  |
+| Index de consommation, tarifs 1 à 4 (kWh) | simple capteur                  | 1.8.1 à 1.8.4          |
+| Index d'injection (kWh), tarifs 1 à 4     | simple capteur                  | 2.8.0 à 2.8.4          |
+| Puissance prélevée, injectée, absolue (W) | simple capteur                  | 1.7.0, 2.7.0, 15.7.0   |
+| Puissance L1, L2, L3 (W)                  | simple capteur, sans historique | 36.7.0, 56.7.0, 76.7.0 |
+| Signal Wi-Fi (dBm)                        | simple capteur, sans historique | rssi                   |
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+- L'**index de consommation** alimente le suivi énergétique de Gladys, qui en
+  tire la consommation et son coût. Il est publié chaque minute et vérifié
+  d'abord : jamais 0 ; une baisse ou un saut que le foyer n'a pas pu
+  consommer est **retenu** (la dernière valeur acceptée est renvoyée) et
+  affiché dans l'état de l'intégration. S'il est juste (nouveau compteur,
+  longue coupure), cliquez sur **Accepter l'index retenu** : exactement la
+  valeur affichée est prise. Enregistrer la configuration ne l'accepte
+  jamais.
+- L'**injection** n'entre jamais dans le suivi énergétique (elle serait
+  facturée comme une consommation) : simples capteurs.
+- Les puissances sont envoyées toutes les 10 secondes, seulement quand elles
+  changent (et toutes les 10 minutes sinon). Quand le lecteur ne donne plus
+  de nouveau relevé pendant 5 minutes (tête optique déplacée), elles ne sont
+  plus envoyées et l'état le dit.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+## Installation
 
-## Actions
+1. Installez l'application energieleser, posez le stromleser sur votre
+   compteur et connectez-le à votre Wi-Fi, comme l'explique le fabricant.
+2. Trouvez son adresse IP (dans votre box ou l'application) et donnez-lui de
+   préférence une adresse fixe dans votre box.
+3. Dans Gladys, ouvrez l'intégration, saisissez cette adresse, enregistrez.
+4. Dans l'onglet **Découverte**, créez l'appareil.
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+Si l'état indique que le compteur ne donne pas de puissance, il est sans
+doute verrouillé par PIN : saisissez sur le compteur le PIN donné par votre
+gestionnaire de réseau pour débloquer ses données étendues. Les index
+continuent en attendant.
 
-## Scènes
+## Boutons
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+- **Tester la connexion** : lit le lecteur quand une lecture est due (jamais
+  plus d'une toutes les 10 secondes), sinon donne la dernière lecture.
+- **Accepter l'index retenu** : voir plus haut.
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+## Limites
 
-## Tableau de bord
-
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+- Seul le **stromleser** (électricité) est lu. Un gasleser, wasserleser ou
+  wärmeleser à l'adresse est reconnu et refusé, avec son nom.
+- Un lecteur par intégration. Un autre lecteur qui répond à l'adresse (une IP
+  qui a changé) a son propre appareil : ses valeurs ne vont jamais au
+  précédent.
+- Un index du compteur sans unité connue (Wh, kWh, MWh) n'est jamais utilisé.
+- Lecture seule : le lecteur ne reçoit aucune commande.
 
 ## Dépannage
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+L'état de l'intégration dit ce qui se passe : adresse manquante, lecteur
+injoignable (nouvel essai après 10 s, doublé jusqu'à 5 minutes), réponse
+inattendue, index retenu. Pour regarder le lecteur vous-même, ouvrez
+`http://<adresse>/v1/data` dans un navigateur sur le même réseau.
