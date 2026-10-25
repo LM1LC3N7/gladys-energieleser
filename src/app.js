@@ -280,9 +280,8 @@ export class EnergieleserApp {
 
   // --- Pace ------------------------------------------------------------------
 
-  /** The monotonic time from which the next read may start. */
-  dueAt() {
-    const mono = this.monotonic();
+  /** The monotonic time from which the next read may start, from the caller's instant `mono` (the clock is read once per decision). */
+  dueAt(mono) {
     let due = this.lastReadAt === undefined ? mono : this.lastReadAt + POLL_INTERVAL;
     if (this.nextTryAt !== undefined) {
       due = Math.max(due, this.nextTryAt);
@@ -303,7 +302,8 @@ export class EnergieleserApp {
     if (!this.running || !this.session?.client) {
       return;
     }
-    const wait = Math.max(0, this.dueAt() - this.monotonic());
+    const mono = this.monotonic();
+    const wait = Math.max(0, this.dueAt(mono) - mono);
     this.timer = this.timers.setTimeout(() => {
       this.timer = undefined;
       this.loopRun = this.loop();
@@ -341,7 +341,7 @@ export class EnergieleserApp {
       return;
     }
     const mono = this.monotonic();
-    if (mono < this.dueAt()) {
+    if (mono < this.dueAt(mono)) {
       return;
     }
     /** Another address (or a stop) during an await: this read gives up, silently. */
@@ -758,16 +758,16 @@ export class EnergieleserApp {
     if (this.pause && this.now() < this.pause.until) {
       return this.currentStatus()[1];
     }
-    if (this.busy || this.dueAt() > this.monotonic()) {
+    const mono = this.monotonic();
+    if (this.busy || this.dueAt(mono) > mono) {
       return this.describeOutcome();
     }
     let timer;
     const late = new Promise((resolve) => {
       timer = this.timers.setTimeout(() => resolve(T.test.slow), TEST_ANSWER_WITHIN);
     });
-    const since = this.monotonic();
     try {
-      return await Promise.race([this.tick().then(() => this.describeOutcome(since)), late]);
+      return await Promise.race([this.tick().then(() => this.describeOutcome(mono)), late]);
     } finally {
       this.timers.clearTimeout(timer);
       if (this.running) this.schedule();
@@ -780,7 +780,7 @@ export class EnergieleserApp {
    */
   describeOutcome(since) {
     const mono = this.monotonic();
-    const next = Math.max(0, this.dueAt() - mono);
+    const next = Math.max(0, this.dueAt(mono) - mono);
     const outcome = this.outcome;
     if (!outcome) {
       return T.test.notYet(next);
