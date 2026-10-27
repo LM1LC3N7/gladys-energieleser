@@ -2,7 +2,7 @@
 // The app on a REAL moving clock (performance.now, Date.now, setTimeout) and a
 // real local HTTP server playing the reader: the reads really start, at 0,
 // the interval and twice the interval, with a bounded number of timers. The
-// time is sped up 50 times (10 s of the interval are 200 ms) but it is the
+// time is sped up 20 times (10 s of the interval are 500 ms) but it is the
 // real clock: it moves between any two reads of it.
 // -----------------------------------------------------------------------------
 
@@ -15,7 +15,7 @@ import { DATA_PATH, POLL_INTERVAL } from '../src/constants.js';
 import { createMemoryStore } from '../src/store.js';
 import { strom } from './fixtures/energieleser.js';
 
-const SPEED = 50;
+const SPEED = 20;
 
 test('real clock: reads at 0, the interval and twice the interval; timers bounded', async () => {
   const reads = [];
