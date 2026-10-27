@@ -6,8 +6,8 @@
     "en": "Unofficial: energieleser stromleser on your network: meter power and indexes.",
     "fr": "Non officiel : lecteur energieleser stromleser en local : puissance et index."
   },
-  "version": "0.1.2",
-  "docker_image": "ghcr.io/lm1lc3n7/gladys-energieleser:0.1.2",
+  "version": "0.1.3",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-energieleser:0.1.3",
   "gladys_version": ">=5.2.0",
   "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-energieleser/main/cover.png",
   "categories": ["energy"],
